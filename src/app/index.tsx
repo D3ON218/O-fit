@@ -1,98 +1,112 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View, type HostInstance } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { CircleReveal, measure, type RevealOrigin } from '@/components/motion';
+import { Tap, Txt } from '@/components/ui';
+import { C, F } from '@/theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
+/** Slow wobble for the two background blobs. */
+function useBlob(delay: number) {
+  const t = useSharedValue(delay);
+  useEffect(() => {
+    t.set(withRepeat(withTiming(1, { duration: 9000, easing: Easing.inOut(Easing.ease) }), -1, true));
+  }, [t]);
+  return useAnimatedStyle(() => ({
+    borderTopLeftRadius: 130 * (1 + 0.24 * t.value),
+    borderTopRightRadius: 130 * (1 - 0.24 * t.value),
+    borderBottomRightRadius: 130 * (1 - 0.08 * t.value),
+    borderBottomLeftRadius: 130 * (1 + 0.08 * t.value),
+    transform: [{ rotate: `${40 * t.value}deg` }],
+  }));
 }
 
-export default function HomeScreen() {
+export default function Splash() {
+  const insets = useSafeAreaInsets();
+  const circle = useRef<HostInstance>(null);
+  const [reveal, setReveal] = useState<RevealOrigin | null>(null);
+  const busy = useRef(false);
+
+  const b1 = useBlob(0);
+  const b2 = useBlob(0.5);
+  const breathe = useSharedValue(0);
+  useEffect(() => {
+    breathe.set(withRepeat(withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }), -1, true));
+  }, [breathe]);
+  const breatheStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.05 * breathe.value }] }));
+
+  async function start() {
+    if (busy.current) return;
+    busy.current = true;
+    const r = await measure(circle);
+    if (!r) {
+      router.replace('/main');
+      return;
+    }
+    setReveal({ cx: r.x + r.w / 2, cy: r.y + r.h / 2, r0: r.w / 2 });
+  }
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={styles.root}>
+      <Animated.View style={[styles.b1, b1]} />
+      <Animated.View style={[styles.b2, b2]} />
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <Animated.View style={breatheStyle}>
+        <Tap ref={circle} onPress={start} squash={0.95} style={styles.circle} accessibilityLabel="Empezar">
+          <Text style={styles.logo}>O-fit</Text>
+          <View style={styles.start}>
+            <Text style={styles.startText}>Empezar</Text>
+          </View>
+        </Tap>
+      </Animated.View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+      <Txt style={[styles.tag, { bottom: 34 + insets.bottom }]}>
+        Tu clóset en el celular y un outfit nuevo cada mañana.
+      </Txt>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      {reveal && (
+        // The closet's mint grows out of the circle; the closet screen picks up from there.
+        <CircleReveal epoch={1} origin={reveal} duration={900} onDone={() => router.replace('/main')}>
+          <View style={styles.fill} />
+        </CircleReveal>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
+  root: { flex: 1, backgroundColor: C.bosque, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  b1: { position: 'absolute', width: 260, height: 260, backgroundColor: C.lima, left: -90, top: -60 },
+  b2: { position: 'absolute', width: 220, height: 220, backgroundColor: C.rosa, right: -80, bottom: -40 },
+  circle: {
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: C.menta,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    gap: 14,
   },
-  title: {
+  logo: { fontFamily: F.display, fontSize: 60, letterSpacing: -3, color: C.bosque },
+  start: { backgroundColor: C.bosque, borderRadius: 99, height: 40, paddingHorizontal: 20, justifyContent: 'center' },
+  startText: { fontFamily: F.bodyHeavy, fontSize: 15, color: C.menta },
+  tag: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
     textAlign: 'center',
+    color: C.menta,
+    fontFamily: F.bodySemi,
+    fontSize: 16,
+    lineHeight: 22,
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  fill: { flex: 1, backgroundColor: C.menta },
 });
