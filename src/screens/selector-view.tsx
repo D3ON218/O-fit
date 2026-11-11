@@ -16,7 +16,7 @@ import { GarmentArt } from '@/components/garment-art';
 import { TrashIcon } from '@/components/icons';
 import { animate, Rise } from '@/components/motion';
 import { Btn, CountPill, Mega, Tap, Txt } from '@/components/ui';
-import { CATS, catName, demoPhotos, nextBg, uid } from '@/data/catalog';
+import { CATS, catName, nextBg, uid } from '@/data/catalog';
 import type { Cat, PendingPhoto } from '@/data/types';
 import { pickMany } from '@/lib/media';
 import { deletePhoto, persistPhoto } from '@/lib/photos';
@@ -30,14 +30,13 @@ export function SelectorView() {
   const insets = useSafeAreaInsets();
   const { photos, addPhotos, dropPhoto, addItem } = useCloset();
   const [selCat, setSelCat] = useState<Cat | null>(null);
-  const [done, setDone] = useState(0);
   const [hint, setHintText] = useState(DEFAULT_HINT);
   const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const busy = useRef(false);
 
   const top = photos[0];
   const next = photos[1];
-  const total = done + photos.length;
+  const pending = photos.length;
 
   const tx = useSharedValue(0);
   const nudge = useSharedValue(0);
@@ -95,7 +94,6 @@ export function SelectorView() {
         setHint('Foto borrada.', 1800);
       }
       dropPhoto(top.id);
-      setDone((d) => d + 1);
       setSelCat(null);
     } finally {
       busy.current = false;
@@ -147,7 +145,7 @@ export function SelectorView() {
         <Mega size={40} color={C.papel}>
           Selector
         </Mega>
-        <CountPill label={top ? `${done + 1}/${total}` : `${total}/${total}`} bg={C.lima} color={C.tinta} />
+        <CountPill label={pending ? `${pending} ${pending === 1 ? 'pendiente' : 'pendientes'}` : 'Listo'} bg={C.lima} color={C.tinta} />
       </Rise>
 
       {top ? (
@@ -207,9 +205,6 @@ export function SelectorView() {
             Ya no quedan fotos por revisar. Importa más desde tu galería para ampliar tu clóset.
           </Txt>
           <Btn label="Importar de la galería" onPress={importMore} />
-          <Tap onPress={() => addPhotos(demoPhotos())} style={styles.link}>
-            <Text style={styles.linkText}>Cargar fotos de ejemplo</Text>
-          </Tap>
         </View>
       )}
     </View>
@@ -289,6 +284,4 @@ const styles = StyleSheet.create({
   hint: { fontFamily: F.bodySemi, fontSize: 14, color: C.lila, minHeight: 20, textAlign: 'center' },
   empty: { flex: 1, justifyContent: 'center', gap: 16 },
   emptyText: { fontFamily: F.bodySemi, fontSize: 17, lineHeight: 25, color: C.lila },
-  link: { alignSelf: 'center', padding: 12 },
-  linkText: { fontFamily: F.bodyBold, fontSize: 15, color: C.lila, textDecorationLine: 'underline' },
 });

@@ -72,7 +72,9 @@ export function FavoritesOverlay({ from, back, onClosed }: Props) {
                   ))}
                 </View>
                 <View style={styles.ft}>
-                  <Text style={styles.ftTitle}>Outfit guardado</Text>
+                  <Text style={styles.ftTitle} numberOfLines={1}>
+                    {f.name || 'Outfit guardado'}
+                  </Text>
                   <Text style={styles.ftWhen}>{relativeDay(f.when)}</Text>
                 </View>
                 <Tap onPress={() => removeFav(f.id)} squash={0.9} style={styles.x} accessibilityLabel="Quitar de favoritos">

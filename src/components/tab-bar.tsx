@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, type HostInstance } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 
+import { Avatar } from '@/components/avatar';
 import { HangerIcon, SparkleIcon, StackIcon } from '@/components/icons';
 import { measure, type Rect } from '@/components/motion';
 import { Tap } from '@/components/ui';
+import type { Profile } from '@/data/types';
 import { C, EASE, F, SIZES, SPRING } from '@/theme';
 
 export type TabId = 'closet' | 'outfit' | 'sel';
@@ -20,9 +22,12 @@ type Props = {
   visible: boolean;
   bottom: number;
   onSelect: (id: TabId, from: Rect | null) => void;
+  profile: Profile;
+  onProfile: (node: HostInstance) => void;
 };
 
-export function TabBar({ current, visible, bottom, onSelect }: Props) {
+export function TabBar({ current, visible, bottom, onSelect, profile, onProfile }: Props) {
+  const avatarRef = useRef<HostInstance>(null);
   const [lay, setLay] = useState<Partial<Record<TabId, { x: number; w: number }>>>({});
   const refs = useRef<Partial<Record<TabId, HostInstance | null>>>({});
   const left = useSharedValue(0);
@@ -85,6 +90,14 @@ export function TabBar({ current, visible, bottom, onSelect }: Props) {
           </Tap>
         );
       })}
+      <Tap
+        ref={avatarRef}
+        squash={0.92}
+        style={styles.avatar}
+        accessibilityLabel={`Perfil de ${profile.name}`}
+        onPress={() => avatarRef.current && onProfile(avatarRef.current)}>
+        <Avatar profile={profile} size={46} />
+      </Tap>
     </Animated.View>
   );
 }
@@ -102,6 +115,7 @@ const styles = StyleSheet.create({
     zIndex: 7,
   },
   ind: { position: 'absolute', top: 6, bottom: 6, borderRadius: 999, backgroundColor: C.lima },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 999 },
-  label: { fontFamily: F.bodyHeavy, fontSize: 13 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 999 },
+  label: { fontFamily: F.bodyHeavy, fontSize: 12 },
+  avatar: { width: 54, alignItems: 'center', justifyContent: 'center', marginLeft: 2 },
 });

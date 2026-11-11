@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GarmentArt } from '@/components/garment-art';
 import { HeartIcon, ShuffleIcon } from '@/components/icons';
 import { animate, measure, Rise, wait } from '@/components/motion';
+import { useSheet } from '@/components/sheet';
 import { Btn, Mega, Pill, Round, Tap } from '@/components/ui';
 import { CATS, pick } from '@/data/catalog';
 import type { Garment } from '@/data/types';
@@ -31,6 +32,7 @@ type Shown = { item: Garment; bg: string } | null;
 export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void }) {
   const insets = useSafeAreaInsets();
   const { items, favs, addFav } = useCloset();
+  const sheet = useSheet();
   const [area, setArea] = useState<{ w: number; h: number } | null>(null);
   const [generated, setGenerated] = useState(false);
   const [outfit, setOutfit] = useState<Garment[] | null>(null);
@@ -51,6 +53,8 @@ export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void })
 
   // A garment deleted from the closet can't stay on screen.
   const valid = !!outfit && outfit.every((o) => items.some((i) => i.id === o.id));
+  /** The closet's current copy of a garment, so a rename shows up right away. */
+  const live = (g: Garment) => items.find((i) => i.id === g.id) ?? g;
 
   /* ----- blob: morphs into the slab stack ----- */
   const m = useSharedValue(0);
@@ -81,33 +85,53 @@ export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void })
     };
   });
 
-  function roll() {
-    if (rolling || !canGen) return;
-    setRolling(true);
-    setLiked(false);
-    const next = CATS.map((c, i) => {
-      const pool = items.filter((x) => x.cat === c.id);
-      const opts = pool.filter((x) => !outfit?.[i] || x.id !== outfit[i].id);
-      return pick(opts.length ? opts : pool);
-    });
-    setOutfit(next);
-    let left = 3;
-    CATS.forEach((c, i) => {
-      const pool = items.filter((x) => x.cat === c.id);
-      const n = 8 + i * 5;
-      for (let k = 1; k <= n; k++) {
+  /** A different garment than the one on screen for slab `i`, when there is one. */
+  function draw(i: number) {
+    const pool = items.filter((x) => x.cat === CATS[i].id);
+    const opts = pool.filter((x) => !outfit?.[i] || x.id !== outfit[i].id);
+    return pick(opts.length ? opts : pool);
+  }
+
+  /** Slot-machine flicker on one slab, landing on `final`. */
+  function flick(i: number, final: Garment, steps: number) {
+    const pool = items.filter((x) => x.cat === CATS[i].id);
+    return new Promise<void>((resolve) => {
+      // Backup in case the frame timers get cleared, so the buttons never stay locked.
+      setTimeout(resolve, steps * 70 + 300);
+      for (let k = 1; k <= steps; k++) {
         timers.current.push(
           setTimeout(() => {
-            const fin = k === n;
-            setShown((s) => s.map((v, j) => (j === i ? { item: fin ? next[i] : pick(pool), bg: fin ? SLAB_BG[i] : pick(PALETTE) } : v)));
+            const fin = k === steps;
+            setShown((s) => s.map((v, j) => (j === i ? { item: fin ? final : pick(pool), bg: fin ? SLAB_BG[i] : pick(PALETTE) } : v)));
             if (fin) {
               setPops((p) => p.map((v, j) => (j === i ? v + 1 : v)));
-              if (--left === 0) setRolling(false);
+              resolve();
             }
           }, k * 70),
         );
       }
     });
+  }
+
+  async function roll() {
+    if (rolling || !canGen) return;
+    setRolling(true);
+    setLiked(false);
+    const next = CATS.map((_, i) => draw(i));
+    setOutfit(next);
+    await Promise.all(next.map((g, i) => flick(i, g, 8 + i * 5)));
+    setRolling(false);
+  }
+
+  /** Rerolls a single slab and keeps the other two. */
+  async function rollOne(i: number) {
+    if (rolling || !canGen || !outfit || !valid) return;
+    setRolling(true);
+    setLiked(false);
+    const g = draw(i);
+    setOutfit(outfit.map((v, j) => (j === i ? g : v)));
+    await flick(i, g, 9);
+    setRolling(false);
   }
 
   async function sortear() {
@@ -128,8 +152,15 @@ export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void })
 
   async function like() {
     if (liked || rolling || !outfit || !valid) return;
+    const name = await sheet.prompt({
+      title: 'Guardar outfit',
+      message: 'Ponle un nombre para encontrarlo en tus favoritos.',
+      placeholder: `Outfit ${favs.length + 1}`,
+      confirmLabel: 'Guardar',
+    });
+    if (name === null) return;
     setLiked(true);
-    addFav(outfit);
+    addFav(outfit.map(live), name || `Outfit ${favs.length + 1}`);
     const [a, b] = await Promise.all([measure(likeRef), measure(favRef)]);
     if (a && b) {
       const x = a.x + a.w / 2 - 22;
@@ -156,7 +187,16 @@ export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void })
           {generated ? (
             <View style={styles.stack}>
               {CATS.map((c, i) => (
-                <Slab key={c.id} index={i} split={split} shown={valid || rolling ? shown[i] : null} pop={pops[i]} catName={c.name} />
+                <Slab
+                  key={c.id}
+                  index={i}
+                  split={split}
+                  shown={(valid || rolling) && shown[i] ? { ...shown[i], item: live(shown[i].item) } : null}
+                  pop={pops[i]}
+                  catName={c.name}
+                  canReroll={valid && !rolling}
+                  onReroll={() => rollOne(i)}
+                />
               ))}
             </View>
           ) : (
@@ -205,7 +245,17 @@ export function OutfitView({ onFavs }: { onFavs: (node: HostInstance) => void })
   );
 }
 
-function Slab({ index, split, shown, pop, catName }: { index: number; split: SharedValue<number>; shown: Shown; pop: number; catName: string }) {
+type SlabProps = {
+  index: number;
+  split: SharedValue<number>;
+  shown: Shown;
+  pop: number;
+  catName: string;
+  canReroll: boolean;
+  onReroll: () => void;
+};
+
+function Slab({ index, split, shown, pop, catName, canReroll, onReroll }: SlabProps) {
   const s = useSharedValue(1);
   useEffect(() => {
     if (pop) s.set(withSequence(withTiming(1.05, { duration: 0 }), withSpring(1, SPRING)));
@@ -237,6 +287,13 @@ function Slab({ index, split, shown, pop, catName }: { index: number; split: Sha
               {shown.item.name}
             </Text>
           </View>
+          <Round
+            label={`Cambiar solo ${catName.toLowerCase()}`}
+            onPress={onReroll}
+            disabled={!canReroll}
+            style={[styles.reroll, !canReroll && styles.off]}>
+            <ShuffleIcon size={16} color={C.menta} />
+          </Round>
         </>
       )}
     </Animated.View>
@@ -301,17 +358,18 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingVertical: 10,
     paddingLeft: 14,
-    paddingRight: 22,
+    paddingRight: 12,
     overflow: 'hidden',
   },
   sart: { height: '100%', aspectRatio: 1, borderRadius: 999, overflow: 'hidden' },
   stxt: { flex: 1, gap: 6, alignItems: 'flex-start' },
-  sname: { fontFamily: F.bodyHeavy, fontSize: 19, lineHeight: 22, color: C.tinta },
+  sname: { fontFamily: F.bodyHeavy, fontSize: 16, lineHeight: 19, color: C.tinta },
   warn: { fontFamily: F.bodyBold, fontSize: 15, lineHeight: 21, color: C.tinta },
   ctl: { flexDirection: 'row', gap: 10 },
   likeBtn: { flex: 1, paddingHorizontal: 12 },
   chgBtn: { flex: 1.3 },
   off: { opacity: 0.45 },
+  reroll: { width: 38, height: 38, borderRadius: 19 },
   badge: {
     position: 'absolute',
     top: -4,

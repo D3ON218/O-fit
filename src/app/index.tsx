@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type HostInstance } from 'react-native';
 import Animated, {
@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CircleReveal, measure, type RevealOrigin } from '@/components/motion';
 import { Tap, Txt } from '@/components/ui';
+import { useCloset } from '@/store/closet';
 import { C, F } from '@/theme';
 
 /** Slow wobble for the two background blobs. */
@@ -29,8 +30,17 @@ function useBlob(delay: number) {
   }));
 }
 
-export default function Splash() {
+/** The splash only greets the very first launch; after that the app opens straight in. */
+export default function Index() {
+  const { seenSplash, entry } = useCloset();
+  // Decided once on mount, so marking the splash as seen doesn't cut its own animation short.
+  const [showSplash] = useState(!seenSplash);
+  return showSplash ? <Splash /> : <Redirect href={entry()} />;
+}
+
+function Splash() {
   const insets = useSafeAreaInsets();
+  const { entry, markSplashSeen } = useCloset();
   const circle = useRef<HostInstance>(null);
   const [reveal, setReveal] = useState<RevealOrigin | null>(null);
   const busy = useRef(false);
@@ -43,12 +53,17 @@ export default function Splash() {
   }, [breathe]);
   const breatheStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.05 * breathe.value }] }));
 
+  function leave() {
+    markSplashSeen();
+    router.replace(entry());
+  }
+
   async function start() {
     if (busy.current) return;
     busy.current = true;
     const r = await measure(circle);
     if (!r) {
-      router.replace('/main');
+      leave();
       return;
     }
     setReveal({ cx: r.x + r.w / 2, cy: r.y + r.h / 2, r0: r.w / 2 });
@@ -73,8 +88,8 @@ export default function Splash() {
       </Txt>
 
       {reveal && (
-        // The closet's mint grows out of the circle; the closet screen picks up from there.
-        <CircleReveal epoch={1} origin={reveal} duration={900} onDone={() => router.replace('/main')}>
+        // Mint grows out of the circle; the profiles screen (or the closet) picks up from there.
+        <CircleReveal epoch={1} origin={reveal} duration={900} onDone={leave}>
           <View style={styles.fill} />
         </CircleReveal>
       )}

@@ -106,3 +106,37 @@ export function StackIcon({ size = 22, color = '#06241A' }: P) {
     </Svg>
   );
 }
+
+export function PencilIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" {...line(color, 2.4)} />
+    </Svg>
+  );
+}
+
+export function UserIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={8} r={4} {...line(color, 2.4)} />
+      <Path d="M4 21c1.2-4 4.3-6 8-6s6.8 2 8 6" {...line(color, 2.4)} />
+    </Svg>
+  );
+}
+
+export function LogoutIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10" {...line(color, 2.4)} />
+    </Svg>
+  );
+}
+
+export function GearIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx={12} cy={12} r={3.2} {...line(color, 2.4)} />
+      <Path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8" {...line(color, 2.4)} />
+    </Svg>
+  );
+}

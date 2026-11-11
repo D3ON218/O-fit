@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, View, type HostInstance } from 'react-native';
+import { Keyboard, StyleSheet, Text, TextInput, View, type HostInstance } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -44,6 +44,7 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
   const [layers, setLayers] = useState<Layer[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ item: Garment; catName: string } | null>(null);
+  const [name, setName] = useState('');
 
   // Permission resolves asynchronously; once it is known to be granted the base layer is the camera.
   const camIsBase = startedGranted || (!!perm?.granted && !layers.some((l) => l.id === 'cam'));
@@ -133,6 +134,7 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
   const slabRefs = useRef<(HostInstance | null)[]>([]);
   const choose = (i: number) =>
     run(async () => {
+      Keyboard.dismiss();
       const c = CATS[i];
       const node = slabRefs.current[i];
       const r = node ? await measure({ current: node }) : null;
@@ -146,7 +148,7 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
         id: uid(),
         cat: c.id,
         kind: pick(KINDS[c.id]),
-        name: `${c.name} nuevo`,
+        name: name.trim() || `${c.name} nuevo`,
         fill: pick(FILLS),
         bg: nextBg(),
         imageUri,
@@ -263,8 +265,17 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
           {'¿Qué\nprenda es?'}
         </Mega>
       </Rise>
-      <Rise i={2}>
-        <Txt style={styles.cptext}>Elige una categoría para guardarla en tu clóset.</Txt>
+      <Rise i={2} style={styles.nameField}>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Ponle nombre (opcional)"
+          placeholderTextColor="rgba(6,36,26,0.45)"
+          maxLength={40}
+          returnKeyType="done"
+          style={styles.nameInput}
+        />
+        <Txt style={styles.cptext}>Luego elige una categoría para guardarla en tu clóset.</Txt>
       </Rise>
       <Rise i={3} style={styles.slabs}>
         {CATS.map((c, i) => {
@@ -366,7 +377,17 @@ const styles = StyleSheet.create({
   catpick: { gap: 14 },
   cprow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   thumb: { width: 52, height: 52, borderRadius: 16, backgroundColor: '#1E5A43', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  cptext: { fontFamily: F.bodyBold, fontSize: 16, lineHeight: 22 },
+  cptext: { fontFamily: F.bodyBold, fontSize: 14, lineHeight: 20, opacity: 0.8 },
+  nameField: { gap: 8 },
+  nameInput: {
+    height: 52,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    backgroundColor: C.papel,
+    fontFamily: F.bodyBold,
+    fontSize: 16,
+    color: C.tinta,
+  },
   slabs: { flex: 1, gap: 10, minHeight: 0 },
   cslab: { flex: 1, minHeight: 0, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 24 },
   cslabText: { gap: 2, flexShrink: 1 },

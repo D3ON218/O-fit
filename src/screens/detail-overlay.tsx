@@ -4,8 +4,9 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GarmentArt } from '@/components/garment-art';
-import { CloseIcon } from '@/components/icons';
+import { CloseIcon, PencilIcon } from '@/components/icons';
 import { MorphLayer, Rise, type MorphHandle, type Radii, type Rect } from '@/components/motion';
+import { useSheet } from '@/components/sheet';
 import { Btn, Mega, Pill, Round, Txt } from '@/components/ui';
 import { catName, relativeDay } from '@/data/catalog';
 import type { Garment } from '@/data/types';
@@ -26,8 +27,15 @@ export function DetailOverlay({ item, from, radii, back, onClosed }: Props) {
   const busy = useRef(true);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { removeItem } = useCloset();
+  const { items, removeItem, updateItem } = useCloset();
+  const sheet = useSheet();
   const [ask, setAsk] = useState(false);
+  const name = items.find((i) => i.id === item.id)?.name ?? item.name;
+
+  async function rename() {
+    const next = await sheet.prompt({ title: 'Cambiar nombre', value: name, placeholder: 'Nombre de la prenda' });
+    if (next) updateItem(item.id, { name: next });
+  }
 
   async function close(remove = false) {
     if (busy.current) return;
@@ -59,9 +67,14 @@ export function DetailOverlay({ item, from, radii, back, onClosed }: Props) {
       </Rise>
       <Rise i={2} style={styles.info}>
         <Pill label={catName(item.cat)} />
-        <Mega size={30} color={C.tinta}>
-          {item.name}
-        </Mega>
+        <View style={styles.nameRow}>
+          <Mega size={30} color={C.tinta} style={styles.name}>
+            {name}
+          </Mega>
+          <Round label="Cambiar nombre" bg="rgba(255,255,255,0.45)" onPress={rename} style={styles.pencil}>
+            <PencilIcon size={20} color={C.tinta} />
+          </Round>
+        </View>
         <Txt style={styles.meta}>
           {item.imageUri ? 'Foto guardada en tu teléfono' : 'Ilustración de ejemplo'} · {relativeDay(item.createdAt)}
         </Txt>
@@ -100,7 +113,10 @@ function DeleteRow({ ask, onAsk, onCancel, onConfirm }: { ask: boolean; onAsk: (
 const styles = StyleSheet.create({
   root: { paddingHorizontal: SIZES.gutter, gap: 14 },
   art: { flex: 1, minHeight: 0, borderRadius: 36, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.22)' },
-  info: { gap: 10, alignItems: 'flex-start' },
+  info: { gap: 10, alignItems: 'stretch' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  name: { flexShrink: 1 },
+  pencil: { width: 44, height: 44, borderRadius: 22 },
   meta: { fontFamily: F.bodySemi, fontSize: 15, color: C.tinta, opacity: 0.8 },
   row: { flexDirection: 'row' },
   noWrap: { flexBasis: 0, overflow: 'hidden' },

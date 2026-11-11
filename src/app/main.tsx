@@ -1,3 +1,4 @@
+import { Redirect } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type HostInstance } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -13,13 +14,16 @@ import { ClosetView } from '@/screens/closet-view';
 import { DetailOverlay } from '@/screens/detail-overlay';
 import { FavoritesOverlay } from '@/screens/favorites-overlay';
 import { OutfitView } from '@/screens/outfit-view';
+import { ProfileOverlay } from '@/screens/profile-overlay';
 import { SelectorView } from '@/screens/selector-view';
+import { useCloset } from '@/store/closet';
 import { C, SIZES, SPRING } from '@/theme';
 
 type Overlay =
   | { type: 'detail'; item: Garment; from: Rect; radii: Radii; node: HostInstance }
   | { type: 'capture'; from: Rect }
-  | { type: 'favs'; from: Rect; node: HostInstance };
+  | { type: 'favs'; from: Rect; node: HostInstance }
+  | { type: 'profile'; from: Rect; node: HostInstance };
 
 const TAB_IDS: TabId[] = ['closet', 'outfit', 'sel'];
 
@@ -46,6 +50,7 @@ function useBusy() {
 }
 
 export default function Main() {
+  const { profile } = useCloset();
   const insets = useSafeAreaInsets();
   const busy = useBusy();
   const [tab, setTab] = useState<TabId>('closet');
@@ -98,7 +103,16 @@ export default function Main() {
       return from && { type: 'favs', from, node };
     });
 
+  const openProfile = (node: HostInstance) =>
+    open(async () => {
+      const from = await measure({ current: node });
+      return from && { type: 'profile', from, node };
+    });
+
   const closeOverlay = () => setOverlay(null);
+
+  // Signing out or deleting the profile sends you back to the picker.
+  if (!profile) return <Redirect href="/perfiles" />;
 
   const views: Record<TabId, ReactNode> = {
     closet: (
@@ -131,7 +145,14 @@ export default function Main() {
 
       <Fab ref={fab} visible={tab === 'closet' && overlay?.type !== 'capture'} bottom={insets.bottom + 98} onPress={openCapture} />
 
-      <TabBar current={tab} visible={!overlay} bottom={insets.bottom + SIZES.tabBarInset} onSelect={goTab} />
+      <TabBar
+        current={tab}
+        visible={!overlay}
+        bottom={insets.bottom + SIZES.tabBarInset}
+        onSelect={goTab}
+        profile={profile}
+        onProfile={openProfile}
+      />
 
       {overlay?.type === 'detail' && (
         <DetailOverlay
@@ -158,6 +179,9 @@ export default function Main() {
       )}
       {overlay?.type === 'favs' && (
         <FavoritesOverlay from={overlay.from} back={() => measure({ current: overlay.node })} onClosed={closeOverlay} />
+      )}
+      {overlay?.type === 'profile' && (
+        <ProfileOverlay profile={profile} from={overlay.from} back={() => measure({ current: overlay.node })} onClosed={closeOverlay} />
       )}
     </View>
   );

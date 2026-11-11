@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { SheetProvider } from '@/components/sheet';
 import { ClosetProvider, useCloset } from '@/store/closet';
 import { C } from '@/theme';
 
@@ -44,7 +45,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <ClosetProvider>
-        <Root />
+        <SheetProvider>
+          <Root />
+        </SheetProvider>
       </ClosetProvider>
     </GestureHandlerRootView>
   );

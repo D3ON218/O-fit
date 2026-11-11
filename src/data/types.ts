@@ -22,10 +22,9 @@ export type Garment = {
   createdAt: number;
 };
 
-export type Outfit = [Garment, Garment, Garment];
-
 export type FavOutfit = {
   id: string;
+  name?: string;
   when: number;
   items: Garment[];
 };
@@ -38,4 +37,24 @@ export type PendingPhoto = {
   fill: string;
   bg: string;
   imageUri?: string;
+};
+
+export type Profile = {
+  id: string;
+  name: string;
+  photoUri?: string;
+  color: string;
+  createdAt: number;
+};
+
+/** Everything that belongs to one profile. */
+export type Closet = {
+  items: Garment[];
+  favs: FavOutfit[];
+  photos: PendingPhoto[];
+};
+
+export type Prefs = {
+  /** Show the profile picker on every launch instead of reopening the last profile. */
+  askProfileOnOpen: boolean;
 };

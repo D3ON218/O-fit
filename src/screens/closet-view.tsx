@@ -1,12 +1,14 @@
-import { useEffect, useRef } from 'react';
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type HostInstance, type ScrollViewInstance } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, ZoomIn } from 'react-native-reanimated';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type HostInstance, type ScrollViewInstance } from 'react-native';
+import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GarmentArt, GarmentShape } from '@/components/garment-art';
+import { CloseIcon, PencilIcon } from '@/components/icons';
 import { Rise, type Radii } from '@/components/motion';
-import { CountPill, Mega, Tap, Txt } from '@/components/ui';
-import { CATS, catName } from '@/data/catalog';
+import { useSheet } from '@/components/sheet';
+import { CountPill, Mega, Round, Tap, Txt } from '@/components/ui';
+import { CATS } from '@/data/catalog';
 import type { Cat, Garment } from '@/data/types';
 import { useCloset } from '@/store/closet';
 import { C, EASE, F, SIZES } from '@/theme';
@@ -23,23 +25,45 @@ type Props = {
 };
 
 export function ClosetView({ cat, onCat, onOpen, scrollKey }: Props) {
-  const { items } = useCloset();
+  const { items, updateItem, removeItem } = useCloset();
+  const sheet = useSheet();
+  const [menuId, setMenuId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const scroll = useRef<ScrollViewInstance>(null);
   const list = items.filter((i) => i.cat === cat);
   const n = items.length;
-  const tile = Math.floor((Math.min(width, 560) - SIZES.gutter * 2 - 10) / 2);
+  // Two columns on a phone; wider screens (tablets, web) get a third so tiles stay card-sized.
+  const cols = width >= 720 ? 3 : 2;
+  const tile = Math.min(260, Math.floor((width - SIZES.gutter * 2 - 10 * (cols - 1)) / cols));
 
   useEffect(() => {
     if (scrollKey) scroll.current?.scrollTo({ y: 0, animated: true });
   }, [scrollKey]);
+
+  async function rename(it: Garment) {
+    setMenuId(null);
+    const name = await sheet.prompt({ title: 'Cambiar nombre', value: it.name, placeholder: 'Nombre de la prenda' });
+    if (name) updateItem(it.id, { name });
+  }
+
+  async function remove(it: Garment) {
+    setMenuId(null);
+    const ok = await sheet.confirm({
+      title: '¿Eliminar prenda?',
+      message: `"${it.name}" se borrará de tu clóset.`,
+      confirmLabel: 'Eliminar',
+      danger: true,
+    });
+    if (ok) removeItem(it.id);
+  }
 
   return (
     <ScrollView
       ref={scroll}
       style={styles.root}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 34, paddingBottom: 122 + insets.bottom }]}
+      onScrollBeginDrag={() => setMenuId(null)}
       showsVerticalScrollIndicator={false}>
       <Rise i={0} style={styles.head}>
         <Mega>{'Mi\nclóset'}</Mega>
@@ -53,7 +77,10 @@ export function ClosetView({ cat, onCat, onOpen, scrollKey }: Props) {
             cat={c.id}
             on={c.id === cat}
             count={items.filter((i) => i.cat === c.id).length}
-            onPress={() => onCat(c.id)}
+            onPress={() => {
+              setMenuId(null);
+              onCat(c.id);
+            }}
           />
         ))}
       </Rise>
@@ -63,12 +90,22 @@ export function ClosetView({ cat, onCat, onOpen, scrollKey }: Props) {
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>Aquí no hay nada</Text>
             <Txt style={styles.emptyText}>
-              Toca el botón verde y fotografía tu primera prenda de {catName(cat).toLowerCase()}.
+              Toca el botón verde y fotografía tu primera prenda.
             </Txt>
           </View>
         ) : (
           list.map((it, i) => (
-            <Tile key={`${cat}:${it.id}`} item={it} index={i} size={tile} onOpen={onOpen} />
+            <Tile
+              key={`${cat}:${it.id}`}
+              item={it}
+              index={i}
+              size={tile}
+              menuOpen={menuId === it.id}
+              onOpen={onOpen}
+              onMenu={(open) => setMenuId(open ? it.id : null)}
+              onEdit={() => rename(it)}
+              onDelete={() => remove(it)}
+            />
           ))
         )}
       </Rise>
@@ -76,30 +113,62 @@ export function ClosetView({ cat, onCat, onOpen, scrollKey }: Props) {
   );
 }
 
-function Tile({ item, index, size, onOpen }: { item: Garment; index: number; size: number; onOpen: Props['onOpen'] }) {
+type TileProps = {
+  item: Garment;
+  index: number;
+  size: number;
+  menuOpen: boolean;
+  onOpen: Props['onOpen'];
+  onMenu: (open: boolean) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+};
+
+/**
+ * Fade-and-rise driven by a shared value. Layout-animation keyframes with transforms left
+ * tiles half-scaled and overlapping on web, so the entrance is animated by hand instead.
+ */
+function useEnter(delay: number, distance: number, duration: number) {
+  const t = useSharedValue(0);
+  useEffect(() => {
+    t.set(withDelay(delay, withTiming(1, { duration, easing: Easing.out(Easing.cubic) })));
+  }, [t, delay, duration]);
+  return useAnimatedStyle(() => ({
+    opacity: t.value,
+    transform: [{ translateY: (1 - t.value) * distance }],
+  }));
+}
+
+function MenuButton({ delay, children }: { delay: number; children: ReactNode }) {
+  const st = useEnter(delay, 8, 200);
+  return <Animated.View style={st}>{children}</Animated.View>;
+}
+
+function Tile({ item, index, size, menuOpen, onOpen, onMenu, onEdit, onDelete }: TileProps) {
   const ref = useRef<HostInstance>(null);
+  const enter = useEnter(Math.min(index, 8) * 25, 10, 240);
   const radii = TILE_RADII[index % 4];
   const r = typeof radii === 'number' ? [radii, radii, radii, radii] : radii;
   const centered = index % 4 !== 0;
+  const shape = {
+    width: size,
+    height: size,
+    borderTopLeftRadius: r[0],
+    borderTopRightRadius: r[1],
+    borderBottomRightRadius: r[2],
+    borderBottomLeftRadius: r[3],
+  };
   return (
-    <Animated.View entering={ZoomIn.delay(Math.min(index, 10) * 55).springify().damping(14)}>
+    <Animated.View style={enter}>
       <Tap
         ref={ref}
         squash={0.95}
         accessibilityLabel={item.name}
+        accessibilityHint="Mantén presionado para editar o eliminar"
+        delayLongPress={350}
+        onLongPress={() => onMenu(true)}
         onPress={() => ref.current && onOpen(item, ref.current, radii)}
-        style={[
-          styles.tile,
-          {
-            width: size,
-            height: size,
-            backgroundColor: item.bg,
-            borderTopLeftRadius: r[0],
-            borderTopRightRadius: r[1],
-            borderBottomRightRadius: r[2],
-            borderBottomLeftRadius: r[3],
-          },
-        ]}>
+        style={[styles.tile, shape, { backgroundColor: item.bg }]}>
         <GarmentArt item={item} style={StyleSheet.absoluteFill} />
         <View style={[styles.tlRow, centered && styles.tlRowCenter]} pointerEvents="none">
           <View style={styles.tl}>
@@ -109,6 +178,22 @@ function Tile({ item, index, size, onOpen }: { item: Garment; index: number; siz
           </View>
         </View>
       </Tap>
+      {/* Laid over the tile as a sibling: buttons can't nest inside the tile's own button. */}
+      {menuOpen && (
+        <Animated.View style={[styles.menu, shape]} entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => onMenu(false)} accessibilityLabel="Cerrar opciones" />
+          <MenuButton delay={0}>
+            <Round label={`Eliminar ${item.name}`} bg={C.rojo} onPress={onDelete}>
+              <CloseIcon color="#FFFFFF" />
+            </Round>
+          </MenuButton>
+          <MenuButton delay={50}>
+            <Round label={`Cambiar nombre de ${item.name}`} bg={C.papel} onPress={onEdit}>
+              <PencilIcon color={C.tinta} />
+            </Round>
+          </MenuButton>
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -169,6 +254,17 @@ const styles = StyleSheet.create({
   cnText: { fontFamily: F.bodyHeavy, fontSize: 12, color: C.tinta },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tile: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  menu: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(6,36,26,0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  },
   tlRow: { position: 'absolute', left: 10, right: 10, bottom: 10, alignItems: 'flex-start' },
   tlRowCenter: { alignItems: 'center' },
   tl: {
