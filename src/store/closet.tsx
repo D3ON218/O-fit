@@ -26,7 +26,7 @@ const fresh = (): Root => ({
   profiles: [],
   closets: {},
   current: null,
-  prefs: { askProfileOnOpen: false },
+  prefs: { askProfileOnOpen: false, cameraSound: true },
   seenSplash: false,
 });
 
@@ -52,6 +52,7 @@ type Store = Closet & {
   addItem: (g: Garment) => void;
   updateItem: (id: string, patch: Partial<Pick<Garment, 'name'>>) => void;
   removeItem: (id: string) => void;
+  clearCloset: () => void;
   addFav: (items: Garment[], name?: string) => void;
   removeFav: (id: string) => void;
   addPhotos: (p: PendingPhoto[]) => void;
@@ -159,6 +160,11 @@ export function ClosetProvider({ children }: { children: ReactNode }) {
           items: c.items.filter((i) => i.id !== id),
           favs: c.favs.filter((f) => !f.items.some((i) => i.id === id)),
         };
+      }),
+    clearCloset: () =>
+      edit((c) => {
+        deleteClosetFiles(c);
+        return { items: [], favs: [], photos: [] };
       }),
     addFav: (items, name) =>
       edit((c) => {

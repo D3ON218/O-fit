@@ -57,4 +57,6 @@ export type Closet = {
 export type Prefs = {
   /** Show the profile picker on every launch instead of reopening the last profile. */
   askProfileOnOpen: boolean;
+  /** Play shutter sound when capturing a photo. */
+  cameraSound?: boolean;
 };

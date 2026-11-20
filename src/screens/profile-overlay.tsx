@@ -4,7 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
-import { CloseIcon, GearIcon, LogoutIcon, TrashIcon, UserIcon } from '@/components/icons';
+import { CloseIcon, EmptyClosetIcon, GearIcon, LogoutIcon, TrashIcon, UserIcon, VolumeIcon } from '@/components/icons';
 import { MorphLayer, Rise, type MorphHandle, type Rect } from '@/components/motion';
 import { ProfileForm } from '@/components/profile-form';
 import { useSheet } from '@/components/sheet';
@@ -24,7 +24,7 @@ type Props = {
 export function ProfileOverlay({ profile, from, back, onClosed }: Props) {
   const insets = useSafeAreaInsets();
   const sheet = useSheet();
-  const { items, favs, prefs, setPrefs, updateProfile, deleteProfile, signOut } = useCloset();
+  const { items, favs, prefs, setPrefs, updateProfile, deleteProfile, clearCloset, signOut } = useCloset();
   const morph = useRef<MorphHandle>(null);
   const busy = useRef(true);
   const [editing, setEditing] = useState(false);
@@ -48,7 +48,20 @@ export function ProfileOverlay({ profile, from, back, onClosed }: Props) {
     if (ok) close(() => deleteProfile(profile.id));
   }
 
+  async function handleClearCloset() {
+    const ok = await sheet.confirm({
+      title: '¿Vaciar clóset?',
+      message: `Se perderán todas las prendas y outfits guardados de ${profile.name}. Esta acción no se puede deshacer.`,
+      confirmLabel: 'Vaciar clóset',
+      danger: true,
+    });
+    if (ok) {
+      clearCloset();
+    }
+  }
+
   const n = items.length;
+  const cameraSound = prefs.cameraSound ?? true;
   return (
     <MorphLayer
       ref={morph}
@@ -122,10 +135,34 @@ export function ProfileOverlay({ profile, from, back, onClosed }: Props) {
                     thumbColor={C.papel}
                   />
                 </View>
+                <View style={styles.row}>
+                  <View style={styles.rowIcon}>
+                    <VolumeIcon color={C.tinta} />
+                  </View>
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowLabel}>Sonido de la cámara</Text>
+                    <Text style={styles.rowHelp}>
+                      {cameraSound ? 'Suena un obturador al tomar una foto.' : 'Captura fotos en silencio.'}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={cameraSound}
+                    onValueChange={(v) => setPrefs({ cameraSound: v })}
+                    trackColor={{ false: 'rgba(6,36,26,0.2)', true: C.lima }}
+                    thumbColor={C.papel}
+                  />
+                </View>
               </Rise>
 
               <Rise i={4} style={styles.group}>
                 <Row icon={<LogoutIcon color={C.tinta} />} label="Cerrar sesión" help="Volver a elegir perfil" onPress={() => close(signOut)} />
+                <Row
+                  icon={<EmptyClosetIcon color={C.papel} />}
+                  label="Vaciar clóset"
+                  help="Borrar todas las prendas y outfits de este perfil"
+                  danger
+                  onPress={handleClearCloset}
+                />
                 <Row icon={<TrashIcon color={C.papel} />} label="Eliminar perfil" danger onPress={remove} />
               </Rise>
             </>

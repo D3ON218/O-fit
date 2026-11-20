@@ -140,3 +140,55 @@ export function GearIcon({ size = 22, color = '#06241A' }: P) {
     </Svg>
   );
 }
+
+export function RetakeIcon({ size = 26, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" {...line(color, 2.6)} />
+      <Path d="M3 3v5h5" {...line(color, 2.6)} />
+      <Path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" {...line(color, 2.6)} />
+      <Path d="M21 21v-5h-5" {...line(color, 2.6)} />
+    </Svg>
+  );
+}
+
+export function CropIcon({ size = 24, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M6 2v14a2 2 0 0 0 2 2h14" {...line(color, 2.4)} />
+      <Path d="M18 22V8a2 2 0 0 0-2-2H2" {...line(color, 2.4)} />
+    </Svg>
+  );
+}
+
+export function RotateCwIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.24L21 8" {...line(color, 2.4)} />
+      <Path d="M21 3v5h-5" {...line(color, 2.4)} />
+    </Svg>
+  );
+}
+
+export function VolumeIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M11 5L6 9H2v6h4l5 4V5z" {...line(color, 2.2)} />
+      <Path d="M15.54 8.46a5 5 0 0 1 0 7.07" {...line(color, 2.2)} />
+      <Path d="M19.07 4.93a10 10 0 0 1 0 14.14" {...line(color, 2.2)} />
+    </Svg>
+  );
+}
+
+export function EmptyClosetIcon({ size = 22, color = '#06241A' }: P) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" {...line(color, 2.2)} />
+      <Path d="M5 21v2M19 21v2" {...line(color, 2.2)} />
+      <Path d="M6 7.5h12" {...line(color, 2)} />
+      <Path d="M12 7.5v1.2a1 1 0 1 0 1-1" {...line(color, 1.8)} />
+      <Path d="m12 8.7-3.5 2.8h7L12 8.7z" {...line(color, 1.8)} />
+      <Path d="M3 16.5h18" {...line(color, 2)} />
+    </Svg>
+  );
+}

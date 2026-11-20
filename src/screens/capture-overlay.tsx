@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
-import { Keyboard, StyleSheet, Text, TextInput, View, type HostInstance } from 'react-native';
+import { Keyboard, Platform, StyleSheet, Text, TextInput, View, type HostInstance } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GarmentArt, GarmentShape } from '@/components/garment-art';
-import { BackIcon, CameraIcon, CheckIcon, CloseIcon, GalleryIcon } from '@/components/icons';
+import { BackIcon, CameraIcon, CheckIcon, CloseIcon, CropIcon, GalleryIcon, RetakeIcon } from '@/components/icons';
+import { ImageCropper } from '@/components/image-cropper';
 import { measure, MorphLayer, Rise, wait, type MorphHandle, type Radii, type Rect } from '@/components/motion';
 import { Btn, Mega, Pill, Round, Tap, Txt } from '@/components/ui';
 import { CATS, FILLS, KINDS, nextBg, pick, uid } from '@/data/catalog';
@@ -32,17 +33,41 @@ const SLABS: { bg: string; radii: Radii }[] = [
   { bg: C.sol, radii: 999 },
 ];
 
+function playShutterAudio() {
+  if (typeof window !== 'undefined') {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.09);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.09);
+    } catch {
+      // Audio not permitted or not supported
+    }
+  }
+}
+
 export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
   const [perm, requestPerm] = useCameraPermissions();
   const [startedGranted] = useState(() => !!perm?.granted);
   const insets = useSafeAreaInsets();
-  const { addItem } = useCloset();
+  const { addItem, prefs } = useCloset();
 
   const outer = useRef<MorphHandle>(null);
   const layerRefs = useRef<Partial<Record<Layer['id'], MorphHandle | null>>>({});
   const busy = useRef(true);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [photo, setPhoto] = useState<string | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
   const [saved, setSaved] = useState<{ item: Garment; catName: string } | null>(null);
   const [name, setName] = useState('');
 
@@ -77,6 +102,7 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
 
   const closeAll = () =>
     run(async () => {
+      setIsCropping(false);
       const rect = await back();
       await outer.current?.close(rect ? { rect, radii: rect.w / 2 } : null);
       onClosed();
@@ -95,10 +121,13 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
       if (r) await push({ id: 'cam', from: r, radii: r.h / 2, fromColor: C.lima, color: C.camara });
     });
 
-  /* ----- camera ----- */
+  /* ----- camera & review ----- */
   const cam = useRef<CameraView>(null);
   const shutterRef = useRef<HostInstance>(null);
   const galRef = useRef<HostInstance>(null);
+  const confirmRef = useRef<HostInstance>(null);
+  const retakeRef = useRef<HostInstance>(null);
+  const cropBtnRef = useRef<HostInstance>(null);
   const flash = useSharedValue(0);
   const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
 
@@ -110,16 +139,27 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
   const shoot = () =>
     run(async () => {
       flash.set(withSequence(withTiming(0.9, { duration: 0 }), withTiming(0, { duration: 350 })));
+      const soundEnabled = prefs.cameraSound ?? true;
       let uri: string | null = null;
       try {
+        if (soundEnabled && Platform.OS === 'web') {
+          playShutterAudio();
+        }
         // On an emulator without a camera this throws; the garment then gets a drawing instead.
-        const pic = await cam.current?.takePictureAsync({ quality: 0.7 });
+        const pic = await cam.current?.takePictureAsync({
+          quality: 0.85,
+          shutterSound: soundEnabled,
+        });
         uri = pic?.uri ?? null;
       } catch {
         await wait(120);
       }
-      setPhoto(uri);
-      await openCat(shutterRef.current, '#FFFFFF');
+      if (uri) {
+        setPhoto(uri);
+      } else {
+        setPhoto(null);
+        await openCat(shutterRef.current, '#FFFFFF');
+      }
     });
 
   const gallery = () =>
@@ -127,7 +167,12 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
       const uri = await pickOne();
       if (!uri) return;
       setPhoto(uri);
-      await openCat(galRef.current, '#3A5A4C');
+    });
+
+  const confirmPhoto = () =>
+    run(async () => {
+      if (!photo) return;
+      await openCat(confirmRef.current, C.lima);
     });
 
   /* ----- category ----- */
@@ -213,47 +258,114 @@ export function CaptureOverlay({ from, back, onSaved, onClosed }: Props) {
     </View>
   );
 
-  const camera = (
-    <View style={styles.cam}>
-      <CameraView ref={cam} style={StyleSheet.absoluteFill} facing="back" />
+  const preview = photo && (
+    <View style={styles.previewContainer}>
       <View style={[styles.camtop, { paddingTop: insets.top + 34 }]}>
         <Round label="Cerrar cámara" bg="rgba(255,255,255,0.16)" onPress={closeAll}>
           <CloseIcon color="#FFFFFF" />
         </Round>
-        <Pill label="Pon la prenda sobre una superficie lisa" bg="rgba(0,0,0,0.35)" color={C.papel} style={styles.camPill} />
+        <Pill label="Revisa tu foto antes de guardar" bg="rgba(0,0,0,0.35)" color={C.papel} style={styles.camPill} />
       </View>
-      <View style={styles.guide} pointerEvents="none">
-        <View style={[styles.corner, styles.tl]} />
-        <View style={[styles.corner, styles.tr]} />
-        <View style={[styles.corner, styles.bl]} />
-        <View style={[styles.corner, styles.br]} />
-        <View style={styles.ghost}>
-          <GarmentShape kind="tee" fill="rgba(255,255,255,0.28)" stroke="transparent" />
-        </View>
-      </View>
-      <View style={[styles.camctl, { paddingBottom: insets.bottom + 38 }]}>
-        <Btn
-          ref={galRef}
-          label="Galería"
-          variant="ghost"
-          onPress={gallery}
-          style={styles.galBtn}
-          textStyle={styles.galText}
-          icon={() => <GalleryIcon color="#FFFFFF" />}
-        />
-        <Tap ref={shutterRef} onPress={shoot} squash={0.92} style={styles.shutter} accessibilityLabel="Tomar foto">
-          <View style={styles.shutterDot} />
+
+      <View style={styles.previewImageWrapper}>
+        <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="contain" />
+        {/* En una esquinita: el símbolo de recortar la foto */}
+        <Tap
+          ref={cropBtnRef}
+          onPress={() => setIsCropping(true)}
+          squash={0.92}
+          style={styles.cropCornerBtn}
+          accessibilityLabel="Recortar foto">
+          <CropIcon size={20} color="#FFFFFF" />
+          <Text style={styles.cropCornerText}>Recortar</Text>
         </Tap>
-        <View style={styles.sp} />
       </View>
-      <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
+
+      {/* Botones abajo */}
+      <View style={[styles.reviewCtl, { paddingBottom: insets.bottom + 38 }]}>
+        {/* Retake: círculo de los que se apuntan a sí mismos */}
+        <Tap
+          ref={retakeRef}
+          onPress={() => setPhoto(null)}
+          squash={0.9}
+          style={styles.retakeBtn}
+          accessibilityLabel="Volver a tomar foto">
+          <RetakeIcon size={30} color="#FFFFFF" />
+        </Tap>
+
+        {/* Palomita: confirmación */}
+        <Tap
+          ref={confirmRef}
+          onPress={confirmPhoto}
+          squash={0.9}
+          style={styles.confirmBtn}
+          accessibilityLabel="Aceptar foto">
+          <CheckIcon size={36} color={C.tinta} />
+        </Tap>
+      </View>
+    </View>
+  );
+
+  const camera = (
+    <View style={styles.cam}>
+      {!photo && (
+        <>
+          <CameraView ref={cam} style={StyleSheet.absoluteFill} facing="back" />
+          <View style={[styles.camtop, { paddingTop: insets.top + 34 }]}>
+            <Round label="Cerrar cámara" bg="rgba(255,255,255,0.16)" onPress={closeAll}>
+              <CloseIcon color="#FFFFFF" />
+            </Round>
+            <Pill label="Pon la prenda sobre una superficie lisa" bg="rgba(0,0,0,0.35)" color={C.papel} style={styles.camPill} />
+          </View>
+          <View style={styles.guide} pointerEvents="none">
+            <View style={[styles.corner, styles.tl]} />
+            <View style={[styles.corner, styles.tr]} />
+            <View style={[styles.corner, styles.bl]} />
+            <View style={[styles.corner, styles.br]} />
+            <View style={styles.ghost}>
+              <GarmentShape kind="tee" fill="rgba(255,255,255,0.28)" stroke="transparent" />
+            </View>
+          </View>
+          <View style={[styles.camctl, { paddingBottom: insets.bottom + 38 }]}>
+            <Btn
+              ref={galRef}
+              label="Galería"
+              variant="ghost"
+              onPress={gallery}
+              style={styles.galBtn}
+              textStyle={styles.galText}
+              icon={() => <GalleryIcon color="#FFFFFF" />}
+            />
+            <Tap ref={shutterRef} onPress={shoot} squash={0.92} style={styles.shutter} accessibilityLabel="Tomar foto">
+              <View style={styles.shutterDot} />
+            </Tap>
+            <View style={styles.sp} />
+          </View>
+          <Animated.View style={[styles.flash, flashStyle]} pointerEvents="none" />
+        </>
+      )}
+
+      {photo && preview}
+
+      {isCropping && photo && (
+        <ImageCropper
+          imageUri={photo}
+          onDone={(croppedUri) => {
+            setPhoto(croppedUri);
+            setIsCropping(false);
+          }}
+          onCancel={() => setIsCropping(false)}
+        />
+      )}
     </View>
   );
 
   const catPick = (
     <View style={[styles.layer, styles.catpick, { paddingTop: insets.top + 34, paddingBottom: insets.bottom + 28 }]}>
       <Rise i={0} style={styles.cprow}>
-        <Round label="Volver a la cámara" onPress={() => run(() => pop('cat', photo ? galRef.current : shutterRef.current))}>
+        <Round
+          label="Volver a la cámara"
+          onPress={() => run(() => pop('cat', photo ? (confirmRef.current ?? galRef.current) : shutterRef.current))}>
           <BackIcon color={C.menta} />
         </Round>
         <View style={styles.thumb}>
@@ -373,6 +485,69 @@ const styles = StyleSheet.create({
   shutterDot: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#FFFFFF' },
   sp: { width: 112 },
   flash: { ...StyleSheet.absoluteFill, backgroundColor: '#FFFFFF' },
+
+  previewContainer: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: C.camara,
+    justifyContent: 'space-between',
+  },
+  previewImageWrapper: {
+    flex: 1,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 16,
+    borderRadius: 26,
+    overflow: 'hidden',
+    backgroundColor: '#04160F',
+    position: 'relative',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  cropCornerBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    zIndex: 10,
+  },
+  cropCornerText: {
+    fontFamily: F.bodyBold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  reviewCtl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 36,
+    paddingHorizontal: 24,
+  },
+  retakeBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmBtn: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: C.lima,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   catpick: { gap: 14 },
   cprow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
